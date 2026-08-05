@@ -1,0 +1,84 @@
+services:
+  todo-api:
+    image: ${DOCKER_IMAGE_NAMESPACE}/todo-api:${TAG}
+    container_name: todo-api
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PGHOST: todo-db
+      PGPORT: 5432
+      PGUSER: todo
+      PGDATABASE: todo
+    env_file:
+      - .env
+    depends_on:
+      todo-db:
+        condition: service_healthy
+
+  stats-api:
+    image: ${DOCKER_IMAGE_NAMESPACE}/stats-api:${TAG}
+    container_name: stats-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: todo-db
+      DB_PORT: 5432
+      DB_NAME: todo
+      DB_USER: todo
+    env_file:
+      - .env
+    depends_on:
+      todo-db:
+        condition: service_healthy
+
+  todo-db:
+    image: postgres:16-alpine
+    container_name: todo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: todo
+      POSTGRES_USER: todo
+    env_file:
+      - .env
+    expose:
+      - "5432"
+    volumes:
+      - todo-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "todo", "-d", "todo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - todo-api
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  todo-postgres-data:
+  prometheus-data:
+  grafana-data:

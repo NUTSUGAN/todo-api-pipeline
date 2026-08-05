@@ -1,0 +1,19 @@
+FROM ubuntu:24.04
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    docker.io \
+    docker-compose-v2 \
+    openssh-server \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -s /bin/bash deploy \
+  && usermod -aG docker deploy \
+  && mkdir -p /run/sshd /srv/todo \
+  && chown -R deploy:deploy /srv/todo
+
+EXPOSE 22 3000 3001 9090
+
+CMD ["/usr/sbin/sshd", "-D"]

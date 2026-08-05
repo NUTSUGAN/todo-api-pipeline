@@ -50,11 +50,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     if: github.event_name == 'push'
+    outputs:
+      published: ${{ steps.publish-context.outputs.push }}
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - name: Decide whether images can be published
+        id: publish-context
+        run: |
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Login to Docker Hub
-        if: github.ref == 'refs/heads/main'
+        if: steps.publish-context.outputs.push == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -63,20 +76,20 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.ref == 'refs/heads/main' }}
+          push: ${{ steps.publish-context.outputs.push == 'true' }}
           tags: ${{ env.DOCKER_IMAGE_NAMESPACE }}/todo-api:${{ env.TAG }}
       - name: Build stats-api
         uses: docker/build-push-action@v6
         with:
           context: ./stats_api
-          push: ${{ github.ref == 'refs/heads/main' }}
+          push: ${{ steps.publish-context.outputs.push == 'true' }}
           tags: ${{ env.DOCKER_IMAGE_NAMESPACE }}/stats-api:${{ env.TAG }}
 
   deploy:
     name: Deploy production
     runs-on: self-hosted
     needs: [build]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.build.outputs.published == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Load SSH key in memory

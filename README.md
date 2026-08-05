@@ -40,6 +40,8 @@ La pipeline a ete deplacee sur le vrai projet Todo API. Le workflow
 `.github/workflows/ci-cd.yml` lance les tests avec une vraie base PostgreSQL
 jetable, construit les images `todo-api` et `stats-api`, les tague au SHA du
 commit, puis deploie depuis `main` sur un runner self-hosted par SSH.
+Si les secrets Docker Hub ne sont pas encore configures, le workflow construit
+les images sans les publier et saute le deploiement.
 
 **Tests ajoutes :**
 - creation d'une tache puis relecture par identifiant ;

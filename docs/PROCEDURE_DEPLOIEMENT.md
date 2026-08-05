@@ -30,6 +30,11 @@ Variables GitHub Actions optionnelles :
 - `DOCKER_IMAGE_NAMESPACE`, si le namespace Docker Hub n'est pas le meme que
   `DOCKERHUB_USERNAME`.
 
+Sans `DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN`, la pipeline lance les tests et
+construit les images localement dans le runner, mais ne pousse pas sur Docker
+Hub et ne deploie pas. C'est volontaire : un repo fraichement cree doit rester
+vert tant que les secrets de production ne sont pas encore branches.
+
 Fichier `/srv/todo/.env` requis sur la machine cible :
 
 ```env

@@ -1,0 +1,29 @@
+groups:
+  - name: todo-api
+    rules:
+      - alert: TodoApiDown
+        expr: up{job="todo-api"} == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: Todo API ne repond plus a Prometheus
+          description: La cible todo-api est down depuis plus de 15 secondes.
+
+      - alert: TodoApiHighErrorRate
+        expr: (sum(rate(http_requests_total{status=~"5.."}[2m])) / sum(rate(http_requests_total[2m])) > 0.05) and sum(rate(http_requests_total[2m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Taux de reponses 5xx eleve
+          description: Plus de 5% des requetes HTTP repondent en 5xx sur les 2 dernieres minutes.
+
+      - alert: TodoApiHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Latence p95 elevee
+          description: Le p95 HTTP depasse 500 ms depuis plus de 5 minutes.

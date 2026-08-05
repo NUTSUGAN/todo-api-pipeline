@@ -37,6 +37,7 @@ jobs:
           ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /srv/todo/grafana/provisioning/datasources /srv/todo/grafana/provisioning/dashboards /srv/todo/grafana/dashboards"
           scp -P "${{ secrets.DEPLOY_PORT }}" deploy/compose.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/compose.yml"
           scp -P "${{ secrets.DEPLOY_PORT }}" deploy/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/prometheus.yml"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/alerts.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/alerts.yml"
           scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/datasources/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/datasources/prometheus.yml"
           scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/dashboards/dashboards.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/dashboards/dashboards.yml"
           scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/dashboards/todo-api-overview.json "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/dashboards/todo-api-overview.json"

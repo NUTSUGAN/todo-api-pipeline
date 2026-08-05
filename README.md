@@ -31,6 +31,7 @@ npm test
 - Equivalence GitLab-CI : `.gitlab-ci.yml`
 - Compose de production : `deploy/compose.yml`
 - Configuration Prometheus : `deploy/prometheus.yml`
+- Regles d'alerte Prometheus : `deploy/alerts.yml`
 - Dashboard Grafana : `deploy/grafana/dashboards/todo-api-overview.json`
 - Procedure : `docs/PROCEDURE_DEPLOIEMENT.md`
 
@@ -62,6 +63,7 @@ les images sans les publier et saute le deploiement.
 - `deploy/compose.yml` pour `todo-api`, `stats-api`, `todo-db`, `prometheus`
   et `grafana` ;
 - `deploy/prometheus.yml` avec scrape de `todo-api:3000` ;
+- `deploy/alerts.yml` avec alertes API down, 5xx eleves et p95 eleve ;
 - `.gitlab-ci.yml` comme carte de traduction GitLab-CI equivalente ;
 - `.github/workflows/rollback.yml` pour declencher un retour arriere depuis
   GitHub Actions avec un SHA choisi ;

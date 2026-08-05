@@ -65,8 +65,8 @@ DB_PASSWORD=<mot-de-passe-postgres>
 4. Attendre le job `Deploy production`.
 
    Verification attendue : le job tourne sur le runner `self-hosted`, copie
-   `deploy/compose.yml`, `deploy/prometheus.yml` et les fichiers Grafana dans
-   `/srv/todo`, puis execute `docker compose up -d`.
+   `deploy/compose.yml`, `deploy/prometheus.yml`, `deploy/alerts.yml` et les
+   fichiers Grafana dans `/srv/todo`, puis execute `docker compose up -d`.
 
 5. Verifier que l'API repond.
 
@@ -96,6 +96,15 @@ DB_PASSWORD=<mot-de-passe-postgres>
    `Todo API - Golden Signals`.
 
    Resultat attendu : le panneau `Disponibilite` vaut `1`.
+
+8. Verifier que les regles d'alerte Prometheus sont chargees.
+
+   ```sh
+   ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
+     'curl -fsS http://localhost:9090/api/v1/rules | grep TodoApiDown'
+   ```
+
+   Resultat attendu : la regle `TodoApiDown` apparait dans la reponse.
 
 ## 3. Commande de deploiement manuel
 
@@ -175,6 +184,12 @@ Requetes PromQL du dashboard :
 - Erreurs : `sum(rate(http_requests_total{status=~"5.."}[1m])) / sum(rate(http_requests_total[1m]))`
 - Latence p95 : `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))`
 - Metier : `tasks_in_database`
+
+Regles d'alerte chargees par Prometheus :
+
+- `TodoApiDown` : `up{job="todo-api"} == 0` pendant 15 secondes.
+- `TodoApiHighErrorRate` : plus de 5% de reponses `5xx` pendant 2 minutes.
+- `TodoApiHighLatencyP95` : p95 superieur a 500 ms pendant 5 minutes.
 
 ## 6. Pannes connues et signatures
 

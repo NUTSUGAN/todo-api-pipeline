@@ -1,6 +1,85 @@
-# docker-project
+# todo-api-pipeline
+
+Todo API conteneurisee avec Node/Express, PostgreSQL, une stats-api FastAPI,
+une pipeline CI/CD, un deploiement Docker Compose et une supervision
+Prometheus/Grafana.
+
+## Lancer les tests
+
+Les tests d'integration ont besoin d'un PostgreSQL accessible.
+
+```bash
+docker run -d --rm --name todo-api-test-postgres \
+  -e POSTGRES_DB=todo_test \
+  -e POSTGRES_USER=todo \
+  -e POSTGRES_PASSWORD=todo_pw \
+  -p 5433:5432 \
+  postgres:16-alpine
+
+PGHOST=127.0.0.1 \
+PGPORT=5433 \
+PGUSER=todo \
+PGPASSWORD=todo_pw \
+PGDATABASE=todo_test \
+npm test
+```
+
+## Deploiement et monitoring
+
+- Workflow principal : `.github/workflows/ci-cd.yml`
+- Compose de production : `deploy/compose.yml`
+- Configuration Prometheus : `deploy/prometheus.yml`
+- Dashboard Grafana : `deploy/grafana/dashboards/todo-api-overview.json`
+- Procedure : `docs/PROCEDURE_DEPLOIEMENT.md`
 
 ## Journal de bord
+
+### Pipeline, tests d'integration et monitoring (2026-08-05)
+
+La pipeline a ete deplacee sur le vrai projet Todo API. Le workflow
+`.github/workflows/ci-cd.yml` lance les tests avec une vraie base PostgreSQL
+jetable, construit les images `todo-api` et `stats-api`, les tague au SHA du
+commit, puis deploie depuis `main` sur un runner self-hosted par SSH.
+
+**Tests ajoutes :**
+- creation d'une tache puis relecture par identifiant ;
+- demande d'une tache inexistante avec retour `404` ;
+- corps invalide avec retour `400` ;
+- suppression puis verification que la tache a disparu de la liste ;
+- exposition et evolution des metriques Prometheus.
+
+**Instrumentation :**
+- route `/metrics` en texte brut Prometheus ;
+- compteur `http_requests_total` par methode, route normalisee et statut ;
+- histogramme `http_request_duration_seconds` pour calculer le p95 ;
+- metriques metier `tasks_created_total` et `tasks_in_database`.
+
+**Fichiers de production ajoutes :**
+- `deploy/compose.yml` pour `todo-api`, `stats-api`, `todo-db`, `prometheus`
+  et `grafana` ;
+- `deploy/prometheus.yml` avec scrape de `todo-api:3000` ;
+- provisioning Grafana et dashboard `Todo API - Golden Signals` ;
+- `Dockerfile.vm` pour documenter une machine cible Linux avec SSH et Docker ;
+- `docs/PROCEDURE_DEPLOIEMENT.md` pour le deploiement, les verifications,
+  le rollback et les signatures de panne.
+
+**Releves Grafana a completer pendant l'exercice :**
+
+| Moment | up | Requetes/s | Taux d'erreur | p95 |
+|---|---:|---:|---:|---:|
+| Au repos, avant la boucle de charge | A mesurer | A mesurer | A mesurer | A mesurer |
+| Pendant la boucle de charge | A mesurer | A mesurer | A mesurer | A mesurer |
+| Pendant l'incident | A mesurer | A mesurer | A mesurer | A mesurer |
+
+**Retour arriere chronometre :**
+- SHA deploye avant regression : a renseigner.
+- SHA de retour arriere : a renseigner.
+- Temps entre constat et retablissement : a mesurer.
+
+**Passation d'astreinte :**
+- Role pilote : a completer apres passage.
+- Role mains : a completer apres passage.
+- Ligne de procedure manquante ou ambigue : a completer apres passage.
 
 ### Dockerfile de production (2026-08-03)
 

@@ -27,6 +27,7 @@ npm test
 ## Deploiement et monitoring
 
 - Workflow principal : `.github/workflows/ci-cd.yml`
+- Rollback manuel : `.github/workflows/rollback.yml`
 - Equivalence GitLab-CI : `.gitlab-ci.yml`
 - Compose de production : `deploy/compose.yml`
 - Configuration Prometheus : `deploy/prometheus.yml`
@@ -62,6 +63,8 @@ les images sans les publier et saute le deploiement.
   et `grafana` ;
 - `deploy/prometheus.yml` avec scrape de `todo-api:3000` ;
 - `.gitlab-ci.yml` comme carte de traduction GitLab-CI equivalente ;
+- `.github/workflows/rollback.yml` pour declencher un retour arriere depuis
+  GitHub Actions avec un SHA choisi ;
 - provisioning Grafana et dashboard `Todo API - Golden Signals` ;
 - `Dockerfile.vm` pour documenter une machine cible Linux avec SSH et Docker ;
 - `docs/PROCEDURE_DEPLOIEMENT.md` pour le deploiement, les verifications,

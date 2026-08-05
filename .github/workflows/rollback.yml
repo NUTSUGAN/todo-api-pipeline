@@ -1,0 +1,48 @@
+name: Rollback production
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Commit SHA tag to redeploy
+        required: true
+        type: string
+      image_namespace:
+        description: Docker image namespace, defaults to repo variable or Docker Hub username
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOCKER_IMAGE_NAMESPACE: ${{ inputs.image_namespace || vars.DOCKER_IMAGE_NAMESPACE || secrets.DOCKERHUB_USERNAME || 'nutsugan' }}
+
+jobs:
+  rollback:
+    name: Roll back to selected image tag
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load SSH key in memory
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Trust target host
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+      - name: Copy current production config
+        run: |
+          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /srv/todo/grafana/provisioning/datasources /srv/todo/grafana/provisioning/dashboards /srv/todo/grafana/dashboards"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/compose.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/compose.yml"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/prometheus.yml"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/datasources/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/datasources/prometheus.yml"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/dashboards/dashboards.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/dashboards/dashboards.yml"
+          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/dashboards/todo-api-overview.json "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/dashboards/todo-api-overview.json"
+      - name: Redeploy selected tag
+        run: |
+          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "cd /srv/todo && DOCKER_IMAGE_NAMESPACE='${{ env.DOCKER_IMAGE_NAMESPACE }}' TAG='${{ inputs.target_sha }}' docker compose -f compose.yml pull && DOCKER_IMAGE_NAMESPACE='${{ env.DOCKER_IMAGE_NAMESPACE }}' TAG='${{ inputs.target_sha }}' docker compose -f compose.yml up -d --remove-orphans"
+      - name: Verify rollback
+        run: |
+          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "curl -fsS http://localhost:3000/health && docker inspect -f '{{.Config.Image}}' todo-api | grep ':${{ inputs.target_sha }}$'"

@@ -126,6 +126,18 @@ Declencher un retour arriere si :
 - une regression visible est constatee sur une route critique,
 - le responsable du deploiement decide de retablir la derniere version saine.
 
+Option recommandee si GitHub Actions et le runner self-hosted sont disponibles :
+
+1. Ouvrir `Actions > Rollback production`.
+2. Cliquer sur `Run workflow`.
+3. Renseigner `target_sha` avec le SHA sain a redeployer.
+4. Laisser `image_namespace` vide sauf si les images ne sont pas dans le
+   namespace Docker Hub par defaut.
+5. Lancer le workflow.
+
+Verification attendue : le job `Verify rollback` affiche `/health` puis
+l'image `todo-api` terminee par `:<target_sha>`.
+
 Commande :
 
 ```sh

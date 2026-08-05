@@ -1,0 +1,76 @@
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  NODE_VERSION: "22.14.0"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_IMAGE_NAMESPACE: "$DOCKERHUB_USERNAME"
+  TAG: "$CI_COMMIT_SHORT_SHA"
+
+test:
+  stage: test
+  image: node:22.14.0-alpine
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    PGHOST: postgres
+    PGPORT: "5432"
+    PGUSER: todo
+    PGPASSWORD: todo_pw
+    PGDATABASE: todo_test
+    POSTGRES_DB: todo_test
+    POSTGRES_USER: todo
+    POSTGRES_PASSWORD: todo_pw
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm test
+
+build:
+  stage: build
+  image: docker:28
+  services:
+    - docker:28-dind
+  before_script:
+    - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - docker build -t "$DOCKER_IMAGE_NAMESPACE/todo-api:$TAG" .
+    - docker build -t "$DOCKER_IMAGE_NAMESPACE/stats-api:$TAG" ./stats_api
+    - docker push "$DOCKER_IMAGE_NAMESPACE/todo-api:$TAG"
+    - docker push "$DOCKER_IMAGE_NAMESPACE/stats-api:$TAG"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $DOCKERHUB_USERNAME && $DOCKERHUB_TOKEN'
+    - when: never
+
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval "$(ssh-agent -s)"
+    - echo "$DEPLOY_SSH_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - ssh-keyscan -p "$DEPLOY_PORT" "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p /srv/todo/grafana/provisioning/datasources /srv/todo/grafana/provisioning/dashboards /srv/todo/grafana/dashboards"
+    - scp -P "$DEPLOY_PORT" deploy/compose.yml "$DEPLOY_USER@$DEPLOY_HOST:/srv/todo/compose.yml"
+    - scp -P "$DEPLOY_PORT" deploy/prometheus.yml "$DEPLOY_USER@$DEPLOY_HOST:/srv/todo/prometheus.yml"
+    - scp -P "$DEPLOY_PORT" deploy/grafana/provisioning/datasources/prometheus.yml "$DEPLOY_USER@$DEPLOY_HOST:/srv/todo/grafana/provisioning/datasources/prometheus.yml"
+    - scp -P "$DEPLOY_PORT" deploy/grafana/provisioning/dashboards/dashboards.yml "$DEPLOY_USER@$DEPLOY_HOST:/srv/todo/grafana/provisioning/dashboards/dashboards.yml"
+    - scp -P "$DEPLOY_PORT" deploy/grafana/dashboards/todo-api-overview.json "$DEPLOY_USER@$DEPLOY_HOST:/srv/todo/grafana/dashboards/todo-api-overview.json"
+    - ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "cd /srv/todo && DOCKER_IMAGE_NAMESPACE='$DOCKER_IMAGE_NAMESPACE' TAG='$TAG' docker compose -f compose.yml pull && DOCKER_IMAGE_NAMESPACE='$DOCKER_IMAGE_NAMESPACE' TAG='$TAG' docker compose -f compose.yml up -d --remove-orphans"
+    - ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "curl -fsS http://localhost:3000/health"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $DEPLOY_SSH_KEY && $DEPLOY_HOST && $DEPLOY_PORT && $DEPLOY_USER'
+      when: manual
+    - when: never

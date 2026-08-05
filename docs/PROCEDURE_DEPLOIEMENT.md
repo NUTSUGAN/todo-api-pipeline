@@ -35,6 +35,10 @@ construit les images localement dans le runner, mais ne pousse pas sur Docker
 Hub et ne deploie pas. C'est volontaire : un repo fraichement cree doit rester
 vert tant que les secrets de production ne sont pas encore branches.
 
+Le fichier `.gitlab-ci.yml` fournit la meme logique en syntaxe GitLab-CI :
+stages `test`, `build`, `deploy`, PostgreSQL en service de test, Docker-in-Docker
+pour le build, puis deploiement manuel par SSH.
+
 Fichier `/srv/todo/.env` requis sur la machine cible :
 
 ```env

@@ -1,21 +1,21 @@
 {
-  "name": "docker-project",
+  "name": "todo-api-pipeline",
   "version": "1.0.0",
-  "description": "",
-  "homepage": "https://github.com/fluffy1211/docker-project#readme",
+  "description": "Todo API with Docker, CI/CD, deployment, and monitoring exercises.",
+  "homepage": "https://github.com/NUTSUGAN/todo-api-pipeline#readme",
   "bugs": {
-    "url": "https://github.com/fluffy1211/docker-project/issues"
+    "url": "https://github.com/NUTSUGAN/todo-api-pipeline/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fluffy1211/docker-project.git"
+    "url": "git+https://github.com/NUTSUGAN/todo-api-pipeline.git"
   },
   "license": "ISC",
   "author": "",
   "type": "commonjs",
-  "main": "index.js",
+  "main": "src/app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --runInBand",
     "start": "node src/app.js"
   },
   "dependencies": {
@@ -23,5 +23,9 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2"
   }
 }

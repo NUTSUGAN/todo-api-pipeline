@@ -34,6 +34,7 @@ npm test
 - Regles d'alerte Prometheus : `deploy/alerts.yml`
 - Dashboard Grafana : `deploy/grafana/dashboards/todo-api-overview.json`
 - Procedure : `docs/PROCEDURE_DEPLOIEMENT.md`
+- Configuration GitHub Actions : `docs/CONFIGURATION_GITHUB_ACTIONS.md`
 
 ## Journal de bord
 
@@ -71,6 +72,8 @@ les images sans les publier et saute le deploiement.
 - `Dockerfile.vm` pour documenter une machine cible Linux avec SSH et Docker ;
 - `docs/PROCEDURE_DEPLOIEMENT.md` pour le deploiement, les verifications,
   le rollback et les signatures de panne.
+- `docs/CONFIGURATION_GITHUB_ACTIONS.md` pour brancher Docker Hub, les secrets
+  et le runner self-hosted.
 - `scripts/incident.sh` pour tirer une panne aleatoire pendant la passation.
 
 **Releves Grafana a completer pendant l'exercice :**

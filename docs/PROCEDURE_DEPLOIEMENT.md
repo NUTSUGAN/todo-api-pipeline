@@ -162,6 +162,15 @@ Requetes PromQL du dashboard :
 
 ## 6. Pannes connues et signatures
 
+Pour l'exercice de passation, le script versionne `scripts/incident.sh` peut
+etre lance sur la machine cible par un encadrant ou un binome :
+
+```sh
+ssh -p <DEPLOY_PORT> root@<DEPLOY_HOST> 'sh -s' < scripts/incident.sh
+```
+
+Ne pas lire `/root/.incident` avant le debriefing.
+
 | Panne | Signature dashboard | Commandes de diagnostic | Correction |
 |---|---|---|---|
 | `todo-api` arretee | `up` passe a `0`, trafic a `0` | `docker ps -a`, `docker logs todo-api --tail=80` | Rejouer le deploiement avec le dernier SHA sain |

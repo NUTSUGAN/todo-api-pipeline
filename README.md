@@ -64,6 +64,7 @@ les images sans les publier et saute le deploiement.
 - `Dockerfile.vm` pour documenter une machine cible Linux avec SSH et Docker ;
 - `docs/PROCEDURE_DEPLOIEMENT.md` pour le deploiement, les verifications,
   le rollback et les signatures de panne.
+- `scripts/incident.sh` pour tirer une panne aleatoire pendant la passation.
 
 **Releves Grafana a completer pendant l'exercice :**
 

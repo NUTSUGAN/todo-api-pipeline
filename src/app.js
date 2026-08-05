@@ -4,15 +4,19 @@ const cors = require('cors');
 const taskRoutes = require('./routes/tasks');
 const errorHandler = require('./middleware/errorHandler');
 const { ready } = require('./db');
+const { metricsMiddleware, metricsHandler } = require('./metrics');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(metricsMiddleware);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+app.get('/metrics', metricsHandler);
 
 app.use('/api/tasks', async (req, res, next) => {
   try {

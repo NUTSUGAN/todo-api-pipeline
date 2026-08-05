@@ -2,6 +2,25 @@ const request = require('supertest');
 const app = require('../../app');
 const { pool, ready } = require('../../db');
 
+function readMetricValue(metrics, metricName, labels = {}) {
+  const labelFilter = Object.entries(labels)
+    .map(([key, value]) => `${key}="${value}"`)
+    .join(',');
+  const matcher = new RegExp(`^${metricName}(?:\\{([^}]*)\\})?\\s+([0-9.e+-]+)$`, 'm');
+  const lines = metrics.split('\n');
+
+  for (const line of lines) {
+    const match = line.match(matcher);
+    if (!match) continue;
+    const labelText = match[1] || '';
+    if (!labelFilter || labelFilter.split(',').every((label) => labelText.includes(label))) {
+      return Number(match[2]);
+    }
+  }
+
+  return 0;
+}
+
 describe('Todo API integration tests', () => {
   beforeAll(async () => {
     await ready;
@@ -85,5 +104,49 @@ describe('Todo API integration tests', () => {
       .expect(200);
 
     expect(listResponse.body).toEqual([]);
+  });
+
+  test('exposes HTTP and task metrics in Prometheus format', async () => {
+    const beforeMetrics = await request(app)
+      .get('/metrics')
+      .expect(200)
+      .expect('Content-Type', /text\/plain/);
+
+    const beforeGetTasks = readMetricValue(beforeMetrics.text, 'http_requests_total', {
+      method: 'GET',
+      route: '/api/tasks',
+      status: '200',
+    });
+    const beforeCreated = readMetricValue(beforeMetrics.text, 'tasks_created_total');
+
+    await request(app).get('/api/tasks').expect(200);
+    await request(app).get('/api/tasks').expect(200);
+    await request(app).get('/api/tasks').expect(200);
+    await request(app).post('/api/tasks').send({ description: 'metric task' }).expect(201);
+
+    const afterMetrics = await request(app)
+      .get('/metrics')
+      .expect(200);
+
+    const afterGetTasks = readMetricValue(afterMetrics.text, 'http_requests_total', {
+      method: 'GET',
+      route: '/api/tasks',
+      status: '200',
+    });
+    const afterCreated = readMetricValue(afterMetrics.text, 'tasks_created_total');
+
+    expect(afterGetTasks - beforeGetTasks).toBe(3);
+    expect(afterCreated - beforeCreated).toBe(1);
+    expect(afterMetrics.text).toContain('http_request_duration_seconds_bucket');
+    expect(afterMetrics.text).toContain('tasks_in_database');
+  });
+
+  test('counts unknown routes without using ids as metric labels', async () => {
+    await request(app).get('/missing-route').expect(404);
+
+    const response = await request(app).get('/metrics').expect(200);
+
+    expect(response.text).toContain('http_requests_total{method="GET",route="unmatched",status="404"}');
+    expect(response.text).not.toContain('/api/tasks/00000000-0000-0000-0000-000000000000');
   });
 });

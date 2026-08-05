@@ -35,6 +35,7 @@ npm test
 - Dashboard Grafana : `deploy/grafana/dashboards/todo-api-overview.json`
 - Procedure : `docs/PROCEDURE_DEPLOIEMENT.md`
 - Configuration GitHub Actions : `docs/CONFIGURATION_GITHUB_ACTIONS.md`
+- Checklist de rendu : `docs/CHECKLIST_RENDU.md`
 
 ## Journal de bord
 

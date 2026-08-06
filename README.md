@@ -56,6 +56,20 @@ SSH : il applique les manifests non sensibles, met a jour l'image
 | Hier, SSH manuel | A renseigner | A renseigner | A renseigner |
 | Aujourd'hui, rolling update | A mesurer | A mesurer | A mesurer |
 
+**Verifications cluster realisees :**
+- `kubectl get pods -n todo` : trois pods `todo-api` et un pod `todo-db` en
+  `Running`, colonne `READY` a `1/1` ;
+- variables runtime injectees depuis `todo-config` et `todo-secret` :
+  `NODE_ENV`, `PORT`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
+  `PGDATABASE` presentes dans le conteneur ;
+- suppression d'un pod `todo-api` : un nouveau pod a ete recree
+  automatiquement par le ReplicaSet ;
+- persistance PostgreSQL : une tache creee via l'API est restee presente
+  apres suppression et recreation du pod `todo-db` ;
+- Docker Desktop `kind` : `k8s/traefik-dev.yaml` installe un controleur
+  Traefik local, puis `curl -H "Host: todo.localhost"
+  http://localhost:8080/health` repond `ok`.
+
 **Retour arriere Kubernetes :**
 - SHA deploye avant regression : a renseigner.
 - Revision Kubernetes de retour : a renseigner.

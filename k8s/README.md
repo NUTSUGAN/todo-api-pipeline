@@ -31,3 +31,18 @@ curl -s -H "Host: todo.localhost" http://localhost:8080/health
 
 The GitHub Actions deploy job updates only the API image and applies non-secret
 manifests. It expects `todo-secret` to already exist in the cluster.
+
+## Docker Desktop fallback
+
+Docker Desktop can create a local `kind` cluster when `k3d` is unavailable. In
+that mode, no Traefik controller is installed by default, so apply the optional
+development controller before testing the Ingress:
+
+```sh
+kubectl apply -f k8s/traefik-dev.yaml
+kubectl rollout status deployment/traefik-dev -n kube-system --timeout=120s
+curl -s -H "Host: todo.localhost" http://localhost:8080/health
+```
+
+This file is for the local Docker Desktop cluster only. It is intentionally not
+used by the GitHub Actions deploy job.

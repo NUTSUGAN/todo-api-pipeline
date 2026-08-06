@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik-dev
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-dev
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - services
+      - endpoints
+      - nodes
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingressclasses
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-dev
+subjects:
+  - kind: ServiceAccount
+    name: traefik-dev
+    namespace: kube-system
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+spec:
+  controller: traefik.io/ingress-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik-dev
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik-dev
+  template:
+    metadata:
+      labels:
+        app: traefik-dev
+    spec:
+      serviceAccountName: traefik-dev
+      containers:
+        - name: traefik
+          image: traefik:v3.1
+          args:
+            - --entrypoints.web.address=:80
+            - --providers.kubernetesingress
+            - --providers.kubernetesingress.ingressclass=traefik
+          ports:
+            - name: web
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-dev
+  namespace: kube-system
+spec:
+  type: LoadBalancer
+  selector:
+    app: traefik-dev
+  ports:
+    - name: web
+      port: 8080
+      targetPort: web

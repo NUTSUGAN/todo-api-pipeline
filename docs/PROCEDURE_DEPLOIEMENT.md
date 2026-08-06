@@ -37,6 +37,14 @@ kubectl apply -f k8s/todo-ingress.yaml
 kubectl rollout status deployment/todo-api -n todo --timeout=120s
 ```
 
+Sur Docker Desktop avec le cluster `kind`, installer aussi le controleur
+Ingress local :
+
+```sh
+kubectl apply -f k8s/traefik-dev.yaml
+kubectl rollout status deployment/traefik-dev -n kube-system --timeout=120s
+```
+
 Verifications :
 
 ```sh

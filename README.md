@@ -70,6 +70,26 @@ SSH : il applique les manifests non sensibles, met a jour l'image
   Traefik local, puis `curl -H "Host: todo.localhost"
   http://localhost:8080/health` repond `ok`.
 
+**Repartition du trafic entre replicas :**
+
+Charge lancee via l'Ingress Docker Desktop pendant 20 secondes :
+
+```text
+Total : 52 requetes, 0 echouees (code != 200)
+```
+
+Compteurs `http_requests_total` lus directement sur chaque pod, en contournant
+le Service par `kubectl port-forward pod/<pod> 3001:3000` :
+
+| Pod | `GET /api/tasks` apres charge |
+|---|---:|
+| `todo-api-65fbb44fb7-hbfqt` | 19 |
+| `todo-api-65fbb44fb7-krhrl` | 17 |
+| `todo-api-65fbb44fb7-n4cbd` | 18 |
+
+Les trois pods ont recu du trafic dans le meme ordre de grandeur : le Service
+ne pointe pas vers une seule copie.
+
 **Retour arriere Kubernetes :**
 - SHA deploye avant regression : a renseigner.
 - Revision Kubernetes de retour : a renseigner.

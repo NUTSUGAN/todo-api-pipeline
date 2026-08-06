@@ -90,6 +90,34 @@ le Service par `kubectl port-forward pod/<pod> 3001:3000` :
 Les trois pods ont recu du trafic dans le meme ordre de grandeur : le Service
 ne pointe pas vers une seule copie.
 
+**Sondes readiness/liveness et limite de `/health` :**
+
+Les deux probes du Deployment ciblent `/health` sur le port `3000` :
+
+```text
+Liveness:  http-get http://:http/health delay=20s timeout=2s period=10s
+Readiness: http-get http://:http/health delay=5s timeout=2s period=5s
+```
+
+Test realise en coupant volontairement PostgreSQL :
+
+```sh
+kubectl scale deployment/todo-db -n todo --replicas=0
+```
+
+Resultat observe pendant que la base etait a `0` replica :
+
+| Verification | Resultat |
+|---|---|
+| `kubectl get pods -n todo -l app=todo-api` | 3 pods `READY 1/1`, `Running` |
+| `GET /health` via Ingress | `200` |
+| `GET /api/tasks` via Ingress | `500` |
+
+Conclusion : les sondes prouvent que le serveur HTTP repond, pas que la base
+PostgreSQL rend le service attendu. La base a ensuite ete remise a un replica
+avec `kubectl scale deployment/todo-db -n todo --replicas=1`, puis
+`GET /api/tasks` est revenu a `200`.
+
 **Retour arriere Kubernetes :**
 - SHA deploye avant regression : a renseigner.
 - Revision Kubernetes de retour : a renseigner.

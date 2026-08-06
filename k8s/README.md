@@ -46,3 +46,34 @@ curl -s -H "Host: todo.localhost" http://localhost:8080/health
 
 This file is for the local Docker Desktop cluster only. It is intentionally not
 used by the GitHub Actions deploy job.
+
+## Resource metrics on Docker Desktop
+
+If `kubectl top pods -n todo` returns `Metrics API not available`, install
+Metrics Server:
+
+```sh
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+On the Docker Desktop `kind` cluster, Metrics Server also needs
+`--kubelet-insecure-tls` because the kubelet certificate does not contain the
+node InternalIP as a SAN. Patch the deployment, then wait for it:
+
+```sh
+kubectl patch deployment metrics-server -n kube-system --type=json --patch-file <json-patch-file>
+kubectl rollout status deployment/metrics-server -n kube-system --timeout=180s
+kubectl top pods -n todo
+```
+
+The patch file contains:
+
+```json
+[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--kubelet-insecure-tls"
+  }
+]
+```

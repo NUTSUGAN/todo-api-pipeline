@@ -195,7 +195,33 @@ REVISION  CHANGE-CAUSE
 
 | `limits.memory` | Charge lancee | Resultat | Observation |
 |---:|---|---|---|
-| 128Mi | `sh scripts/charge.sh 30` | A mesurer | Valeur initiale du manifest |
+| 128Mi | Repos | OK | Valeur initiale du manifest, `kubectl top` autour de `24Mi` avant serrage |
+| 32Mi | 77 requetes sur `GET /api/tasks` | 0 echec | Stable, memoire autour de `17Mi` |
+| 24Mi | 74 requetes sur `GET /api/tasks` | 0 echec | Stable, memoire autour de `16-17Mi` |
+| 20Mi | 79 requetes sur `GET /api/tasks` | 0 echec | Stable, memoire autour de `17Mi` |
+| 18Mi | 78 requetes sur `GET /api/tasks` | 0 echec, puis redemarrages observes pendant l'essai suivant | Trop serre pour etre retenu |
+| 16Mi | Rollout | Echec | Pods en `CrashLoopBackOff`, probes qui echouent |
+
+Valeur retenue dans `k8s/todo-api-deployment.yaml` : `requests.memory: 16Mi`
+et `limits.memory: 20Mi`.
+
+Validation finale sous charge pendant un rolling restart avec cette valeur :
+
+```text
+deployment "todo-api" successfully rolled out
+FINAL_20MI_ROLLOUT_SECONDS=22.8
+FINAL_20MI_TOTAL=91
+FINAL_20MI_FAILED=0
+```
+
+Releve final :
+
+```text
+NAME                        CPU(cores)   MEMORY(bytes)
+todo-api-8489975579-46mgv   16m          15Mi
+todo-api-8489975579-4g2p6   11m          16Mi
+todo-api-8489975579-5kh8w   14m          17Mi
+```
 
 **Diagnostic chaos :**
 

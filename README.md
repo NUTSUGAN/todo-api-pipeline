@@ -54,7 +54,7 @@ SSH : il applique les manifests non sensibles, met a jour l'image
 | Deploiement | Requetes echouees | Secondes d'indisponibilite | Temps de convergence totale |
 |---|---:|---:|---:|
 | Hier, SSH manuel | A renseigner | A renseigner | A renseigner |
-| Aujourd'hui, rolling update | A mesurer | A mesurer | A mesurer |
+| Aujourd'hui, rolling update | 0 | 0 | 25 s |
 
 **Verifications cluster realisees :**
 - `kubectl get pods -n todo` : trois pods `todo-api` et un pod `todo-db` en
@@ -117,6 +117,32 @@ Conclusion : les sondes prouvent que le serveur HTTP repond, pas que la base
 PostgreSQL rend le service attendu. La base a ensuite ete remise a un replica
 avec `kubectl scale deployment/todo-db -n todo --replicas=1`, puis
 `GET /api/tasks` est revenu a `200`.
+
+**Rolling update sous charge :**
+
+Reglage actif dans le Deployment : `replicas: 3`, `maxSurge: 1`,
+`maxUnavailable: 0`.
+
+Pendant une charge continue sur `GET /api/tasks` via l'Ingress, l'image du
+Deployment est passee de `nutsugan/todo-api:7f31beabe82e` a
+`nutsugan/todo-api:phase8-898e761` :
+
+```sh
+kubectl set image deployment/todo-api todo-api=nutsugan/todo-api:phase8-898e761 -n todo
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
+```
+
+Resultat mesure :
+
+```text
+deployment "todo-api" successfully rolled out
+ROLLOUT_SECONDS=25
+Total : 71 requetes, 0 echouees (code != 200)
+```
+
+Apres convergence, le Deployment indiquait 3 replicas updated, ready et
+available, et `kubectl rollout history deployment/todo-api -n todo` listait les
+revisions 1 et 2.
 
 **Retour arriere Kubernetes :**
 - SHA deploye avant regression : a renseigner.

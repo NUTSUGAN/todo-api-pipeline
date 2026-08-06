@@ -6,7 +6,8 @@ cluster Kubernetes local `todo-cluster`.
 ## 1. Cible de production
 
 - Depot GitHub : `https://github.com/NUTSUGAN/todo-api-pipeline`
-- Cluster attendu : `todo-cluster`
+- Cluster attendu : `todo-cluster` avec k3d, ou `docker-desktop` avec le
+  cluster Kubernetes de Docker Desktop
 - Namespace : `todo`
 - API depuis le poste : `http://todo.localhost:8080`
 - Image API : `nutsugan/todo-api:<sha>`
@@ -15,12 +16,22 @@ cluster Kubernetes local `todo-cluster`.
 Acces requis sur le runner self-hosted :
 
 - `kubectl` installe sur le PATH ;
-- kubeconfig qui pointe vers `todo-cluster` ;
+- kubeconfig qui pointe vers le bon cluster ;
 - contexte actif verifiable avec `kubectl config current-context` ;
 - Secret runtime `todo-secret` deja present dans le namespace `todo`.
 
 Le fichier kubeconfig, un `.env` et de vrais mots de passe ne doivent jamais
 etre commit.
+
+Avant toute intervention, verifier le contexte :
+
+```sh
+kubectl config current-context
+kubectl get nodes
+```
+
+Resultat attendu : `k3d-todo-cluster` ou `docker-desktop`, jamais un autre
+cluster.
 
 ## 2. Premier demarrage du cluster
 
@@ -133,7 +144,7 @@ kubectl rollout status deployment/todo-api -n todo --timeout=180s
 ```
 
 Le chronometre demarre au moment ou la regression est constatee et s'arrete
-quand `/health` repond de nouveau normalement.
+quand `/health` et `/api/tasks` repondent de nouveau normalement.
 
 ## 6. Limite connue des sondes
 
@@ -154,11 +165,11 @@ curl -i -H "Host: todo.localhost" http://localhost:8080/api/tasks
 
 | Panne | Signature dans `kubectl get pods` | Signature describe/events | Se repare seule ? | Remede |
 |---|---|---|---|---|
-| Pod supprime | Un nouveau pod apparait, l'ancien passe en `Terminating` | Event de suppression puis creation par ReplicaSet | Oui | Attendre puis verifier `kubectl get pods -n todo` |
-| Processus tue dans le conteneur | `RESTARTS` augmente, puis pod redevient `Running` | `Last State: Terminated`, redemarrage par kubelet | Oui | Attendre puis verifier `/health` |
-| Tag d'image inexistant | `ImagePullBackOff` ou `ErrImagePull` | Events `Failed to pull image` | Non | `kubectl rollout undo deployment/todo-api -n todo` |
-| Cle du Secret supprimee | Pod en `CreateContainerConfigError` ou app en erreur selon le moment | Secret key missing ou variable absente | Non | Reappliquer le secret correct, puis `kubectl rollout restart deployment/todo-api -n todo` |
-| Limite memoire trop basse | `CrashLoopBackOff`, `RESTARTS` augmente | `Last State: Terminated`, `Reason: OOMKilled` | Non | Retirer ou augmenter `resources.limits.memory`, puis attendre le rollout |
+| Pod supprime | Un pod disparait, un nouveau pod du meme ReplicaSet apparait en moins d'une minute | `SuccessfulCreate` sur le ReplicaSet, ancien pod en suppression | Oui | Attendre le nouveau pod, puis verifier `kubectl get pods -n todo -l app=todo-api` |
+| Processus tue dans le conteneur | Sur Docker Desktop, `kill 1`, `kill -9 1` et `killall -9 node` depuis `kubectl exec` ont retourne `0` mais `RESTARTS` est reste a `0` | Aucun `Last State: Terminated` observe dans cet environnement ; a retester sur k3d/K3s si `chaos.sh` tire ce cas | Oui si le process meurt vraiment | Attendre le redemarrage ; si la panne ne se reproduit pas, supprimer le pod pour recuperer une copie saine |
+| Tag d'image inexistant | Anciennes copies toujours `Running`, un nouveau pod en `ErrImagePull` puis `ImagePullBackOff` | `Failed to pull image`, `insufficient_scope`, `Back-off pulling image` | Non | `kubectl rollout undo deployment/todo-api -n todo` |
+| Cle du Secret supprimee | `PGPASSWORD` absent du Secret, rollout restart non convergent dans le delai ; les anciennes copies peuvent continuer de servir | Le cluster ne recree pas la cle manquante ; la correction doit venir du Secret | Non | Restaurer `todo-secret`, puis `kubectl rollout restart deployment/todo-api -n todo` |
+| Limite memoire trop basse | Nouveau pod en `CrashLoopBackOff`, anciennes copies gardees par `maxUnavailable: 0` | `container init was OOM-killed (memory limit too low?)`, puis `Back-off restarting failed container` | Non | `kubectl rollout undo deployment/todo-api -n todo` ou remonter `resources.limits.memory` |
 
 Pour reveler le numero de panne apres diagnostic :
 

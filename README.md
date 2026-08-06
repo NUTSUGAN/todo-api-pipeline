@@ -201,11 +201,11 @@ REVISION  CHANGE-CAUSE
 
 | Panne | Signature pods | Signature events | Se repare seule ? | Remede |
 |---|---|---|---|---|
-| Pod supprime | A remplir | A remplir | Oui | Attendre le nouveau pod |
-| Processus tue | A remplir | A remplir | Oui | Attendre le redemarrage |
-| Tag d'image inexistant | A remplir | A remplir | Non | `kubectl rollout undo deployment/todo-api -n todo` |
-| Cle du Secret supprimee | A remplir | A remplir | Non | Restaurer le Secret puis `kubectl rollout restart deployment/todo-api -n todo` |
-| Limite memoire trop basse | A remplir | A remplir | Non | Augmenter `resources.limits.memory` |
+| Pod supprime | Un pod disparait, un nouveau pod du meme ReplicaSet apparait en moins d'une minute | `SuccessfulCreate` sur le ReplicaSet, ancien pod en suppression | Oui | Attendre le nouveau pod, puis verifier `kubectl get pods -n todo -l app=todo-api` |
+| Processus tue | Sur ce cluster Docker Desktop, `kill 1`, `kill -9 1` et `killall -9 node` depuis `kubectl exec` ont retourne `0` mais `RESTARTS` est reste a `0` | Aucun `Last State: Terminated` observe ; a retester sur k3d/K3s si `chaos.sh` tire ce cas | Oui si le process meurt vraiment | Attendre le redemarrage ; si le runtime ne reproduit pas la panne, supprimer le pod pour recuperer une copie saine |
+| Tag d'image inexistant | Anciennes copies toujours `Running`, un nouveau pod en `ErrImagePull` puis `ImagePullBackOff` | `Failed to pull image`, `insufficient_scope`, `Back-off pulling image` | Non | `kubectl rollout undo deployment/todo-api -n todo` |
+| Cle du Secret supprimee | `PGPASSWORD` absent du Secret, rollout restart non convergent dans le delai ; les anciennes copies peuvent continuer de servir | Le cluster ne recrée pas la cle manquante ; la correction doit venir du Secret | Non | Restaurer `todo-secret`, puis `kubectl rollout restart deployment/todo-api -n todo` |
+| Limite memoire trop basse | Nouveau pod en `CrashLoopBackOff`, anciennes copies gardees par `maxUnavailable: 0` | `container init was OOM-killed (memory limit too low?)`, puis `Back-off restarting failed container` | Non | `kubectl rollout undo deployment/todo-api -n todo` ou remonter `resources.limits.memory` |
 
 ### Pipeline, tests d'integration et monitoring (2026-08-05)
 

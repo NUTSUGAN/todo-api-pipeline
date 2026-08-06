@@ -86,32 +86,27 @@ jobs:
           tags: ${{ env.DOCKER_IMAGE_NAMESPACE }}/stats-api:${{ env.TAG }}
 
   deploy:
-    name: Deploy production
+    name: Deploy Kubernetes
     runs-on: self-hosted
     needs: [build]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.published == 'true'
     steps:
       - uses: actions/checkout@v4
-      - name: Load SSH key in memory
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-      - name: Trust target host
+      - name: Show Kubernetes target
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
-      - name: Copy production files
+          kubectl config current-context
+          kubectl get nodes
+      - name: Apply non-secret manifests
         run: |
-          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /srv/todo/grafana/provisioning/datasources /srv/todo/grafana/provisioning/dashboards /srv/todo/grafana/dashboards"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/compose.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/compose.yml"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/prometheus.yml"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/alerts.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/alerts.yml"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/datasources/prometheus.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/datasources/prometheus.yml"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/provisioning/dashboards/dashboards.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/provisioning/dashboards/dashboards.yml"
-          scp -P "${{ secrets.DEPLOY_PORT }}" deploy/grafana/dashboards/todo-api-overview.json "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/srv/todo/grafana/dashboards/todo-api-overview.json"
-      - name: Start target stack
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/todo-config.yaml
+          kubectl apply -f k8s/todo-db.yaml
+          kubectl apply -f k8s/todo-api-deployment.yaml
+          kubectl apply -f k8s/todo-api-service.yaml
+          kubectl apply -f k8s/todo-ingress.yaml
+      - name: Update API image
         run: |
-          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "cd /srv/todo && DOCKER_IMAGE_NAMESPACE='${{ env.DOCKER_IMAGE_NAMESPACE }}' TAG='${{ env.TAG }}' docker compose -f compose.yml pull && DOCKER_IMAGE_NAMESPACE='${{ env.DOCKER_IMAGE_NAMESPACE }}' TAG='${{ env.TAG }}' docker compose -f compose.yml up -d --remove-orphans"
-      - name: Verify health endpoint
+          kubectl set image deployment/todo-api todo-api="${DOCKER_IMAGE_NAMESPACE}/todo-api:${TAG}" -n todo
+      - name: Wait for rollout
         run: |
-          ssh -p "${{ secrets.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "curl -fsS http://localhost:3000/health"
+          kubectl rollout status deployment/todo-api -n todo --timeout=180s

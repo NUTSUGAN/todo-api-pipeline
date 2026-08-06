@@ -29,6 +29,7 @@ npm test
 - Workflow principal : `.github/workflows/ci-cd.yml`
 - Rollback manuel : `.github/workflows/rollback.yml`
 - Equivalence GitLab-CI : `.gitlab-ci.yml`
+- Manifests Kubernetes : `k8s/`
 - Compose de production : `deploy/compose.yml`
 - Configuration Prometheus : `deploy/prometheus.yml`
 - Regles d'alerte Prometheus : `deploy/alerts.yml`
@@ -38,6 +39,43 @@ npm test
 - Checklist de rendu : `docs/CHECKLIST_RENDU.md`
 
 ## Journal de bord
+
+### Kubernetes local, rollout et resilience (2026-08-06)
+
+Le deploiement cible maintenant le cluster Kubernetes local `todo-cluster`.
+Les manifests sont versionnes dans `k8s/` : Namespace, Deployment, Service,
+ConfigMap, Secret d'exercice, PostgreSQL avec PVC, Ingress Traefik et probes
+HTTP sur `/health`. Le job `Deploy Kubernetes` de GitHub Actions n'utilise plus
+SSH : il applique les manifests non sensibles, met a jour l'image
+`todo-api:<sha>` dans le Deployment, puis bloque sur `kubectl rollout status`.
+
+**Comparaison de deploiement a completer pendant l'exercice :**
+
+| Deploiement | Requetes echouees | Secondes d'indisponibilite | Temps de convergence totale |
+|---|---:|---:|---:|
+| Hier, SSH manuel | A renseigner | A renseigner | A renseigner |
+| Aujourd'hui, rolling update | A mesurer | A mesurer | A mesurer |
+
+**Retour arriere Kubernetes :**
+- SHA deploye avant regression : a renseigner.
+- Revision Kubernetes de retour : a renseigner.
+- Temps entre constat et retablissement : a mesurer.
+
+**Ressources testees :**
+
+| `limits.memory` | Charge lancee | Resultat | Observation |
+|---:|---|---|---|
+| 128Mi | `sh scripts/charge.sh 30` | A mesurer | Valeur initiale du manifest |
+
+**Diagnostic chaos :**
+
+| Panne | Signature pods | Signature events | Se repare seule ? | Remede |
+|---|---|---|---|---|
+| Pod supprime | A remplir | A remplir | Oui | Attendre le nouveau pod |
+| Processus tue | A remplir | A remplir | Oui | Attendre le redemarrage |
+| Tag d'image inexistant | A remplir | A remplir | Non | `kubectl rollout undo deployment/todo-api -n todo` |
+| Cle du Secret supprimee | A remplir | A remplir | Non | Restaurer le Secret puis `kubectl rollout restart deployment/todo-api -n todo` |
+| Limite memoire trop basse | A remplir | A remplir | Non | Augmenter `resources.limits.memory` |
 
 ### Pipeline, tests d'integration et monitoring (2026-08-05)
 

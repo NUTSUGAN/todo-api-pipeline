@@ -1,253 +1,176 @@
 # Procedure de deploiement Todo API
 
-Cette procedure sert a deployer ou retablir la Todo API sur la machine cible.
-Elle doit etre suivie sans modifier les fichiers directement en production, sauf
-pour le fichier `/srv/todo/.env` qui contient les secrets runtime.
+Cette procedure sert a deployer, diagnostiquer et retablir la Todo API dans le
+cluster Kubernetes local `todo-cluster`.
 
-## 1. Informations a avoir sous la main
+## 1. Cible de production
 
 - Depot GitHub : `https://github.com/NUTSUGAN/todo-api-pipeline`
-- Dossier de production sur la machine cible : `/srv/todo`
-- Compose de production : `/srv/todo/compose.yml`
-- API : `http://localhost:3000`
-- Grafana : `http://localhost:3001`
-- Prometheus : `http://localhost:9090`
-- Images Docker attendues :
-  - `nutsugan/todo-api:<sha>`
-  - `nutsugan/stats-api:<sha>`
+- Cluster attendu : `todo-cluster`
+- Namespace : `todo`
+- API depuis le poste : `http://todo.localhost:8080`
+- Image API : `nutsugan/todo-api:<sha>`
+- Manifests Kubernetes : `k8s/`
 
-Secrets GitHub Actions requis :
+Acces requis sur le runner self-hosted :
 
-- `DOCKERHUB_USERNAME`
-- `DOCKERHUB_TOKEN`
-- `DEPLOY_SSH_KEY`
-- `DEPLOY_HOST`
-- `DEPLOY_PORT`
-- `DEPLOY_USER`
+- `kubectl` installe sur le PATH ;
+- kubeconfig qui pointe vers `todo-cluster` ;
+- contexte actif verifiable avec `kubectl config current-context` ;
+- Secret runtime `todo-secret` deja present dans le namespace `todo`.
 
-Variables GitHub Actions optionnelles :
+Le fichier kubeconfig, un `.env` et de vrais mots de passe ne doivent jamais
+etre commit.
 
-- `DOCKER_IMAGE_NAMESPACE`, si le namespace Docker Hub n'est pas le meme que
-  `DOCKERHUB_USERNAME`.
+## 2. Premier demarrage du cluster
 
-Sans `DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN`, la pipeline lance les tests et
-construit les images localement dans le runner, mais ne pousse pas sur Docker
-Hub et ne deploie pas. C'est volontaire : un repo fraichement cree doit rester
-vert tant que les secrets de production ne sont pas encore branches.
-
-Le fichier `.gitlab-ci.yml` fournit la meme logique en syntaxe GitLab-CI :
-stages `test`, `build`, `deploy`, PostgreSQL en service de test, Docker-in-Docker
-pour le build, puis deploiement manuel par SSH.
-
-Fichier `/srv/todo/.env` requis sur la machine cible :
-
-```env
-PGPASSWORD=<mot-de-passe-postgres>
-POSTGRES_PASSWORD=<mot-de-passe-postgres>
-DB_PASSWORD=<mot-de-passe-postgres>
+```sh
+docker stop vm-prod
+k3d cluster create todo-cluster -p "8080:80@loadbalancer"
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/todo-secret.yaml
+kubectl apply -f k8s/todo-config.yaml
+kubectl apply -f k8s/todo-db.yaml
+kubectl apply -f k8s/todo-api-deployment.yaml
+kubectl apply -f k8s/todo-api-service.yaml
+kubectl apply -f k8s/todo-ingress.yaml
+kubectl rollout status deployment/todo-api -n todo --timeout=120s
 ```
 
-## 2. Deploiement normal par la pipeline
+Verifications :
+
+```sh
+kubectl get pods -n todo
+kubectl get pvc -n todo
+curl -fsS -H "Host: todo.localhost" http://localhost:8080/health
+```
+
+Resultat attendu : les pods `todo-api` sont `Running` et `READY 1/1`, la PVC
+`todo-db-data` est `Bound`, et `/health` repond `{"status":"ok",...}`.
+
+## 3. Deploiement normal par la pipeline
 
 1. Pousser un commit sur `main`.
 
-   Verification attendue : le workflow `CI/CD` demarre dans l'onglet Actions.
+   Verification : le workflow `CI/CD` demarre dans GitHub Actions.
 
 2. Attendre le job `Unit and integration tests`.
 
-   Verification attendue : `npm test` passe avec PostgreSQL lance en service.
+   Verification : `npm test` passe avec PostgreSQL lance en service.
 
 3. Attendre le job `Build Docker images`.
 
-   Verification attendue : les images `todo-api:<sha>` et `stats-api:<sha>`
-   sont construites, puis poussees sur Docker Hub si la branche est `main`.
+   Verification : l'image `todo-api:<sha>` est construite et poussee sur
+   Docker Hub.
 
-4. Attendre le job `Deploy production`.
+4. Attendre le job `Deploy Kubernetes`.
 
-   Verification attendue : le job tourne sur le runner `self-hosted`, copie
-   `deploy/compose.yml`, `deploy/prometheus.yml`, `deploy/alerts.yml` et les
-   fichiers Grafana dans `/srv/todo`, puis execute `docker compose up -d`.
-
-5. Verifier que l'API repond.
+   Verification : le job tourne sur le runner `self-hosted`, applique les
+   manifests non sensibles, met a jour l'image du Deployment, puis attend :
 
    ```sh
-   ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-     'curl -fsS http://localhost:3000/health'
+   kubectl rollout status deployment/todo-api -n todo --timeout=180s
    ```
 
-   Resultat attendu :
-
-   ```json
-   {"status":"ok","timestamp":"..."}
-   ```
-
-6. Verifier que Prometheus collecte l'API.
+5. Verifier l'API :
 
    ```sh
-   ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-     'curl -fsS "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22todo-api%22%7D"'
+   curl -fsS -H "Host: todo.localhost" http://localhost:8080/health
+   curl -fsS -H "Host: todo.localhost" http://localhost:8080/api/tasks
    ```
 
-   Resultat attendu : la valeur `up{job="todo-api"}` vaut `1`.
+Si le rollout ne converge pas, le job doit echouer. Ne pas declarer un
+deploiement reussi tant que `rollout status` n'est pas vert.
 
-7. Verifier Grafana.
+## 4. Deploiement manuel d'urgence
 
-   Ouvrir `http://localhost:3001`, puis le dashboard
-   `Todo API - Golden Signals`.
-
-   Resultat attendu : le panneau `Disponibilite` vaut `1`.
-
-8. Verifier que les regles d'alerte Prometheus sont chargees.
-
-   ```sh
-   ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-     'curl -fsS http://localhost:9090/api/v1/rules | grep TodoApiDown'
-   ```
-
-   Resultat attendu : la regle `TodoApiDown` apparait dans la reponse.
-
-## 3. Commande de deploiement manuel
-
-Utiliser cette commande seulement pour retablir le service ou rejouer une
-version precise.
+Utiliser cette sequence seulement si la pipeline est en panne.
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'cd /srv/todo && DOCKER_IMAGE_NAMESPACE=nutsugan TAG=<sha> docker compose -f compose.yml pull && DOCKER_IMAGE_NAMESPACE=nutsugan TAG=<sha> docker compose -f compose.yml up -d --remove-orphans'
+kubectl config current-context
+kubectl get nodes
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/todo-config.yaml
+kubectl apply -f k8s/todo-db.yaml
+kubectl apply -f k8s/todo-api-deployment.yaml
+kubectl apply -f k8s/todo-api-service.yaml
+kubectl apply -f k8s/todo-ingress.yaml
+kubectl set image deployment/todo-api todo-api=nutsugan/todo-api:<sha> -n todo
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
 ```
 
-Verification attendue :
+Point de controle final :
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+kubectl describe deployment todo-api -n todo | grep Image
+curl -fsS -H "Host: todo.localhost" http://localhost:8080/health
 ```
 
-Les conteneurs `todo-api`, `stats-api`, `todo-db`, `prometheus` et `grafana`
-doivent etre `Up`.
+## 5. Retour arriere
 
-## 4. Retour arriere
-
-Declencher un retour arriere si :
-
-- `/health` ne repond plus apres un deploiement,
-- le taux de `5xx` monte fortement dans Grafana,
-- une regression visible est constatee sur une route critique,
-- le responsable du deploiement decide de retablir la derniere version saine.
-
-Option recommandee si GitHub Actions et le runner self-hosted sont disponibles :
-
-1. Ouvrir `Actions > Rollback production`.
-2. Cliquer sur `Run workflow`.
-3. Renseigner `target_sha` avec le SHA sain a redeployer.
-4. Laisser `image_namespace` vide sauf si les images ne sont pas dans le
-   namespace Docker Hub par defaut.
-5. Lancer le workflow.
-
-Verification attendue : le job `Verify rollback` affiche `/health` puis
-l'image `todo-api` terminee par `:<target_sha>`.
-
-Commande :
+Declencher un retour arriere si une regression est constatee sur `/health`,
+`/api/tasks`, le taux de `5xx`, ou pendant un rolling update sous charge.
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'cd /srv/todo && DOCKER_IMAGE_NAMESPACE=nutsugan TAG=<sha-precedent> docker compose -f compose.yml pull && DOCKER_IMAGE_NAMESPACE=nutsugan TAG=<sha-precedent> docker compose -f compose.yml up -d --remove-orphans'
+kubectl rollout history deployment/todo-api -n todo
+kubectl rollout undo deployment/todo-api -n todo
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
 ```
 
-Verification apres retour arriere :
+Pour revenir a une revision precise :
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'curl -fsS http://localhost:3000/health && docker inspect -f "{{.Config.Image}}" todo-api'
+kubectl rollout undo deployment/todo-api -n todo --to-revision=<revision>
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
 ```
 
-Resultat attendu : `/health` repond et l'image affiche le SHA precedent.
+Le chronometre demarre au moment ou la regression est constatee et s'arrete
+quand `/health` repond de nouveau normalement.
 
-Si le tag n'existe pas sur Docker Hub, `docker compose pull` echoue avant de
-remplacer les conteneurs. Dans ce cas, ne pas faire `docker compose down`.
-Choisir un autre SHA connu et relancer la commande de retour arriere.
+## 6. Limite connue des sondes
 
-## 5. Releves Grafana
+Les probes `readinessProbe` et `livenessProbe` appellent `/health`. Cette route
+verifie que le serveur HTTP repond, pas que PostgreSQL repond. Si la base est
+coupee, le pod peut rester `READY 1/1` alors que `/api/tasks` renvoie une
+erreur `500`.
 
-Remplir ce tableau dans le README pendant l'exercice :
-
-| Moment | up | Requetes/s | Taux d'erreur | p95 |
-|---|---:|---:|---:|---:|
-| Au repos, avant la boucle de charge | A mesurer | A mesurer | A mesurer | A mesurer |
-| Pendant la boucle de charge | A mesurer | A mesurer | A mesurer | A mesurer |
-| Pendant l'incident | A mesurer | A mesurer | A mesurer | A mesurer |
-
-Requetes PromQL du dashboard :
-
-- Disponibilite : `up{job="todo-api"}`
-- Trafic : `sum(rate(http_requests_total[1m]))`
-- Erreurs : `sum(rate(http_requests_total{status=~"5.."}[1m])) / sum(rate(http_requests_total[1m]))`
-- Latence p95 : `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))`
-- Metier : `tasks_in_database`
-
-Regles d'alerte chargees par Prometheus :
-
-- `TodoApiDown` : `up{job="todo-api"} == 0` pendant 15 secondes.
-- `TodoApiHighErrorRate` : plus de 5% de reponses `5xx` pendant 2 minutes.
-- `TodoApiHighLatencyP95` : p95 superieur a 500 ms pendant 5 minutes.
-
-## 6. Pannes connues et signatures
-
-Pour l'exercice de passation, le script versionne `scripts/incident.sh` peut
-etre lance sur la machine cible par un encadrant ou un binome :
+Diagnostic a faire dans ce cas :
 
 ```sh
-ssh -p <DEPLOY_PORT> root@<DEPLOY_HOST> 'sh -s' < scripts/incident.sh
+kubectl get pods -n todo
+kubectl logs -n todo deployment/todo-api --tail=120
+curl -i -H "Host: todo.localhost" http://localhost:8080/api/tasks
 ```
 
-Ne pas lire `/root/.incident` avant le debriefing.
+## 7. Pannes connues et signatures
 
-| Panne | Signature dashboard | Commandes de diagnostic | Correction |
-|---|---|---|---|
-| `todo-api` arretee | `up` passe a `0`, trafic a `0` | `docker ps -a`, `docker logs todo-api --tail=80` | Rejouer le deploiement avec le dernier SHA sain |
-| `todo-db` arretee | `up` reste a `1`, erreurs `5xx` montent | `docker ps -a`, `docker logs todo-api --tail=80`, `docker logs todo-db --tail=80` | `docker start todo-db`, puis verifier `/api/tasks` |
-| API deconnectee du network | `up` peut rester a `1`, routes DB en `5xx` | `docker inspect todo-api`, `docker network ls` | Rejouer `docker compose -f compose.yml up -d` |
-| API relancee sans configuration | `/health` peut repondre, `/api/tasks` echoue | `docker inspect todo-api`, verifier `Env` | Rejouer le deploiement compose |
-| Machine surchargee | Grafana lent, p95 monte, commandes lentes | `docker stats`, `docker ps` | Arreter les conteneurs parasites, puis verifier les golden signals |
-| Port 3000 deja occupe | Deploy echoue avec `port is already allocated` | `docker ps --format "table {{.Names}}\t{{.Ports}}"` | Identifier le conteneur occupant, demander validation avant arret |
+| Panne | Signature dans `kubectl get pods` | Signature describe/events | Se repare seule ? | Remede |
+|---|---|---|---|---|
+| Pod supprime | Un nouveau pod apparait, l'ancien passe en `Terminating` | Event de suppression puis creation par ReplicaSet | Oui | Attendre puis verifier `kubectl get pods -n todo` |
+| Processus tue dans le conteneur | `RESTARTS` augmente, puis pod redevient `Running` | `Last State: Terminated`, redemarrage par kubelet | Oui | Attendre puis verifier `/health` |
+| Tag d'image inexistant | `ImagePullBackOff` ou `ErrImagePull` | Events `Failed to pull image` | Non | `kubectl rollout undo deployment/todo-api -n todo` |
+| Cle du Secret supprimee | Pod en `CreateContainerConfigError` ou app en erreur selon le moment | Secret key missing ou variable absente | Non | Reappliquer le secret correct, puis `kubectl rollout restart deployment/todo-api -n todo` |
+| Limite memoire trop basse | `CrashLoopBackOff`, `RESTARTS` augmente | `Last State: Terminated`, `Reason: OOMKilled` | Non | Retirer ou augmenter `resources.limits.memory`, puis attendre le rollout |
 
-## 7. Commandes utiles
-
-Afficher les conteneurs :
+Pour reveler le numero de panne apres diagnostic :
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"'
+base64 -d .incident
 ```
 
-Lire les logs de l'API :
+## 8. Commandes utiles
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'docker logs todo-api --tail=120'
+kubectl get all -n todo
+kubectl describe pod -n todo <pod>
+kubectl logs -n todo deployment/todo-api --tail=120
+kubectl get endpoints -n todo todo-api
+kubectl get ingress -n todo
+kubectl top pods -n todo
 ```
 
-Tester les routes principales :
+Generer de la charge :
 
 ```sh
-ssh -p <DEPLOY_PORT> <DEPLOY_USER>@<DEPLOY_HOST> \
-  'curl -fsS http://localhost:3000/health && curl -fsS http://localhost:3000/api/tasks'
+sh scripts/charge.sh 30
 ```
-
-Generer du trafic :
-
-```sh
-while true; do
-  curl -s http://localhost:3000/api/tasks > /dev/null
-  curl -s -X POST http://localhost:3000/api/tasks \
-    -H 'Content-Type: application/json' \
-    -d '{"description":"charge"}' > /dev/null
-  curl -s http://localhost:3000/api/tasks/inexistant > /dev/null
-  sleep 0.2
-done
-```
-
-Temps attendu :
-
-- Deploiement normal : a mesurer lors du premier passage complet.
-- Retour arriere : a mesurer pendant l'exercice de rollback.

@@ -145,9 +145,51 @@ available, et `kubectl rollout history deployment/todo-api -n todo` listait les
 revisions 1 et 2.
 
 **Retour arriere Kubernetes :**
-- SHA deploye avant regression : a renseigner.
-- Revision Kubernetes de retour : a renseigner.
-- Temps entre constat et retablissement : a mesurer.
+- SHA deploye avant regression : `phase8-898e761`.
+- Regression testee : `PGHOST=todo-db-broken` injecte dans le template du
+  Deployment avec `kubectl set env`.
+- Signature : nouveaux pods en `CrashLoopBackOff`, rollout non convergent, les
+  anciens pods continuent de servir grace a `maxUnavailable: 0`.
+- Commande de retour arriere : `kubectl rollout undo deployment/todo-api -n todo`.
+- Revision Kubernetes de retour : revision `4`, issue de la revision saine
+  precedente.
+- Temps entre constat et retablissement : `8,8 s`.
+- Verifications apres rollback : `/health` et `/api/tasks` repondent `200`, 3
+  replicas API sont `READY 1/1`.
+
+Une regression a ete declenchee avec :
+
+```sh
+kubectl set env deployment/todo-api PGHOST=todo-db-broken -n todo
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
+```
+
+Le rollout n'a pas converge : deux nouveaux pods sont passes en
+`CrashLoopBackOff`, pendant que les anciens pods continuaient de servir le
+trafic. Le retour arriere a ensuite ete lance :
+
+```sh
+kubectl rollout undo deployment/todo-api -n todo
+kubectl rollout status deployment/todo-api -n todo --timeout=180s
+```
+
+Resultat mesure :
+
+```text
+deployment "todo-api" successfully rolled out
+ROLLBACK_SECONDS=8.8
+AFTER_ROLLBACK_HEALTH_STATUS=200
+AFTER_ROLLBACK_TASKS_STATUS=200
+```
+
+Historique apres l'exercice :
+
+```text
+REVISION  CHANGE-CAUSE
+1         <none>
+3         phase9 broken PGHOST
+4         phase9 rollback to healthy revision
+```
 
 **Ressources testees :**
 
